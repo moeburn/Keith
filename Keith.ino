@@ -17,7 +17,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
 
-
+bool buttonstart = false;
 
 Adafruit_ADS1115 ads;
 
@@ -33,6 +33,7 @@ int hours, mins, secs;
 float tempSHT, humSHT;
 int16_t adc0, adc1, adc2, adc3;
 float volts0, volts1, volts2, volts3;
+float tempC;
 
 char auth[] = "NC-rTx2W1w-IPRycGolnSNHYW3BHdBKM";
 
@@ -48,6 +49,7 @@ BLYNK_WRITE(V10) {
   if (String("help") == param.asStr()) {
     terminal.println("==List of available commands:==");
     terminal.println("wifi");
+    terminal.println("reset");
     terminal.println("==End of list.==");
   }
   if (String("wifi") == param.asStr()) {
@@ -59,6 +61,21 @@ BLYNK_WRITE(V10) {
     terminal.println(WiFi.RSSI());
     printLocalTime();
   }
+  if (String("reset") == param.asStr()) {
+    terminal.println("Restarting...");
+    terminal.flush();
+    ESP.restart();
+  }
+}
+
+BLYNK_WRITE(V11)
+{
+  if (param.asInt() == 1) {buttonstart = true;}
+  if (param.asInt() == 0) {buttonstart = false;}
+}
+
+BLYNK_CONNECTED() {
+  Blynk.syncVirtual(V11);
 }
 
 void printLocalTime() {
@@ -78,8 +95,7 @@ void setup(void) {
 
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+    delay(250);
   }
   Serial.println("");
   Serial.print("Connected to ");
@@ -89,10 +105,21 @@ void setup(void) {
 
   Blynk.config(auth, IPAddress(192, 168, 50, 197), 8080);
   Blynk.connect();
+  while (!Blynk.connected()){}
 
   sensors.begin();
   sensors.requestTemperatures(); 
-  float tempC = sensors.getTempCByIndex(0);
+  tempC = sensors.getTempCByIndex(0);
+
+  if (buttonstart) {
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(200, "text/plain", "Hi! I am ESP32.");
+    });
+
+    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
+    server.begin();
+    Serial.println("HTTP server started");
+  }
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
@@ -108,23 +135,39 @@ void setup(void) {
   volts0 = ads.computeVolts(adc0)*2.0;
   Blynk.virtualWrite(V1, volts0);
   Blynk.virtualWrite(V2, tempC);
-  terminal.println("***Keith STARTED***");
-  terminal.print("Connected to ");
-  terminal.println(ssid);
-  terminal.print("IP address: ");
-  terminal.println(WiFi.localIP());
-  printLocalTime();
-  terminal.print("Battery: ");
-  terminal.print(volts0,3);
-  terminal.print("v, Temp: ");
-  terminal.println(tempC,3);
-  terminal.flush();
+  Blynk.virtualWrite(V3, WiFi.RSSI());
+  if (buttonstart){
+    terminal.println("***Keith v1.1 STARTED***");
+    terminal.print("Connected to ");
+    terminal.println(ssid);
+    terminal.print("IP address: ");
+    terminal.println(WiFi.localIP());
+    printLocalTime();
+    terminal.print("Battery: ");
+    terminal.print(volts0,3);
+    terminal.print("v, Temp: ");
+    terminal.println(tempC,3);
+    terminal.flush();
+  }
   Blynk.run();
 
-  esp_sleep_enable_timer_wakeup(60000000); // 60 sec
-  esp_deep_sleep_start(); 
+  if (!buttonstart){
+    esp_sleep_enable_timer_wakeup(55000000); // 60 sec
+    esp_deep_sleep_start(); 
+  }
 }
 
 void loop() {
+  if (WiFi.status() == WL_CONNECTED) {Blynk.run();}
+
+  every(10000){
+    sensors.requestTemperatures(); 
+    tempC = sensors.getTempCByIndex(0);
+    adc0 = ads.readADC_SingleEnded(0);
+    volts0 = ads.computeVolts(adc0)*2.0;
+    Blynk.virtualWrite(V1, volts0);
+    Blynk.virtualWrite(V2, tempC);
+    Blynk.virtualWrite(V3, WiFi.RSSI());
+  }
 
 }
