@@ -100,8 +100,8 @@ void setup(void) {
 
   Blynk.config(auth, IPAddress(192, 168, 50, 197), 8080);
   Blynk.connect();
-  while (!Blynk.connected()){delay(250);}
-
+  while ((!Blynk.connected()) && (millis() < 60000)){delay(250);}
+  Blynk.run();
   sensors.begin();
   sensors.requestTemperatures(); 
   tempC = sensors.getTempCByIndex(0);
@@ -111,9 +111,11 @@ void setup(void) {
   adc0 = ads.readADC_SingleEnded(0);
   volts0 = ads.computeVolts(adc0)*2.0;
   Blynk.virtualWrite(V1, volts0);
+  Blynk.run();
   Blynk.virtualWrite(V2, tempC);
+  Blynk.run();
   Blynk.virtualWrite(V3, wifi);
-  Blynk.virtualWrite(V4, 0);
+  Blynk.run();
   if (buttonstart){
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
     struct tm timeinfo;
@@ -142,7 +144,7 @@ void setup(void) {
     Blynk.run();
   }
   Blynk.run();
-
+  delay(500);
   if (!buttonstart){
     esp_sleep_enable_timer_wakeup(55000000); // 60 sec
     esp_deep_sleep_start(); 
