@@ -34,6 +34,7 @@ float tempSHT, humSHT;
 int16_t adc0, adc1, adc2, adc3;
 float volts0, volts1, volts2, volts3;
 float tempC;
+long wifi;
 
 char auth[] = "NC-rTx2W1w-IPRycGolnSNHYW3BHdBKM";
 
@@ -88,56 +89,39 @@ void printLocalTime() {
 
 void setup(void) {
   setCpuFrequencyMhz(80);
-  Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  Serial.println("");
 
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) {
     delay(250);
   }
-  Serial.println("");
-  Serial.print("Connected to ");
-  Serial.println(ssid);
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  wifi = WiFi.RSSI();
 
   Blynk.config(auth, IPAddress(192, 168, 50, 197), 8080);
   Blynk.connect();
-  while (!Blynk.connected()){}
+  while (!Blynk.connected()){delay(250);}
 
   sensors.begin();
   sensors.requestTemperatures(); 
   tempC = sensors.getTempCByIndex(0);
 
-  if (buttonstart) {
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      request->send(200, "text/plain", "Hi! I am ESP32.");
-    });
-
-    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
-    server.begin();
-    Serial.println("HTTP server started");
-  }
-
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-
-  struct tm timeinfo;
-  getLocalTime(&timeinfo);
-  hours = timeinfo.tm_hour;
-  mins = timeinfo.tm_min;
-  secs = timeinfo.tm_sec;
   ads.setGain(GAIN_ONE);  // 1x gain   +/- 4.096V  1 bit = 2mV      0.125mV
   ads.begin();
   adc0 = ads.readADC_SingleEnded(0);
   volts0 = ads.computeVolts(adc0)*2.0;
   Blynk.virtualWrite(V1, volts0);
   Blynk.virtualWrite(V2, tempC);
-  Blynk.virtualWrite(V3, WiFi.RSSI());
+  Blynk.virtualWrite(V3, wifi);
+  Blynk.virtualWrite(V4, 0);
   if (buttonstart){
-    terminal.println("***Keith v1.1 STARTED***");
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    struct tm timeinfo;
+    getLocalTime(&timeinfo);
+    hours = timeinfo.tm_hour;
+    mins = timeinfo.tm_min;
+    secs = timeinfo.tm_sec;
+    terminal.println("***Keith v1.2 STARTED***");
     terminal.print("Connected to ");
     terminal.println(ssid);
     terminal.print("IP address: ");
@@ -147,7 +131,15 @@ void setup(void) {
     terminal.print(volts0,3);
     terminal.print("v, Temp: ");
     terminal.println(tempC,3);
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(200, "text/plain", "Hi! I am ESP32.");
+    });
+
+    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
+    server.begin();
+    terminal.println("HTTP server started");
     terminal.flush();
+    Blynk.run();
   }
   Blynk.run();
 
